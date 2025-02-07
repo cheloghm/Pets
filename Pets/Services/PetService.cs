@@ -39,11 +39,13 @@ namespace Pets.Services
 
         public async Task<PetViewModel> CreatePetAsync(PetDto petDto)
         {
+            // Map the DTO to the Pet model. Do not assign an ID; let MongoDB generate it.
             var pet = _mapper.Map<Pet>(petDto);
-            pet.Id = Guid.NewGuid();
 
+            // Add the pet to MongoDB.
             var createdPet = await _petRepository.AddAsync(pet);
 
+            // Dispatch the event using the auto-generated Id.
             await _eventDispatcher.DispatchAsync(new PetCreatedEvent(createdPet.Id, createdPet.Name, DateTime.UtcNow));
 
             return _mapper.Map<PetViewModel>(createdPet);

@@ -1,15 +1,11 @@
 ﻿using AutoMapper;
 using FluentValidation.AspNetCore;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Options;
 using Serilog;
 using Serilog.Sinks.OpenSearch;
 using System;
-using System.Text;
 using Pets.Config;
-using Pets.Data;
 using Pets.EventHandlers;
 using Pets.Filters;
 using Pets.Interfaces.Events;
@@ -18,37 +14,21 @@ using Pets.Interfaces.Services;
 using Pets.Repositories;
 using Pets.Services;
 using Pets.Validators;
-using Pets.Mapper;  // For MappingProfile
+using Pets.Mapper;
+using MongoDB.Driver;
 
 namespace Pets.Extensions
 {
     public static class ServiceCollectionExtensions
     {
-        public static IServiceCollection AddPostgresDbContext(this IServiceCollection services)
-        {
-            services.AddDbContext<PetDbContext>((serviceProvider, options) =>
-            {
-                var dbConfig = serviceProvider.GetRequiredService<IOptions<DatabaseConfig>>().Value;
-                var connectionString = dbConfig.BuildConnectionString();
-
-                // Log the connection string for debugging purposes (sanitized).
-                Log.Debug("Using connection string: {ConnectionString}", dbConfig.SanitizeConnectionString());
-
-                options.UseNpgsql(connectionString);
-            });
-            return services;
-        }
-
         public static IServiceCollection AddControllersWithValidators(this IServiceCollection services)
         {
             services.AddControllers(options =>
             {
-                // Register a logging action filter.
                 options.Filters.Add<LoggingActionFilter>();
             })
             .AddFluentValidation(fv =>
             {
-                // Register validators from this assembly.
                 fv.RegisterValidatorsFromAssemblyContaining<CreatePetValidator>();
                 fv.RegisterValidatorsFromAssemblyContaining<UpdatePetValidator>();
                 fv.RegisterValidatorsFromAssemblyContaining<DeletePetValidator>();
@@ -59,12 +39,10 @@ namespace Pets.Extensions
 
         public static IServiceCollection AddEventHandlers(this IServiceCollection services)
         {
-            // Register the event handlers.
             services.AddScoped<IPetEventHandler, PetCreatedEventHandler>();
             services.AddScoped<IPetEventHandler, PetUpdatedEventHandler>();
             services.AddScoped<IPetEventHandler, PetDeletedEventHandler>();
 
-            // Register the event dispatcher.
             services.AddScoped<IEventDispatcher, Pets.Events.EventDispatcher>();
 
             return services;
@@ -72,17 +50,14 @@ namespace Pets.Extensions
 
         public static IServiceCollection AddRepositories(this IServiceCollection services)
         {
-            // Register repository implementations.
+            // Register the MongoDB-based repository.
             services.AddScoped<IPetRepository, PetRepository>();
-
             return services;
         }
 
         public static IServiceCollection AddServices(this IServiceCollection services)
         {
-            // Register business services.
             services.AddScoped<IPetService, PetService>();
-
             return services;
         }
 
@@ -126,25 +101,26 @@ namespace Pets.Extensions
             return services;
         }
 
-        public static IServiceCollection RegisterConfiguration(this IServiceCollection services, IConfiguration configuration)
+        public static IServiceCollection AddMongoDb(this IServiceCollection services, IConfiguration configuration)
         {
-            // Bind and validate DatabaseConfig.
-            services.Configure<DatabaseConfig>(configuration.GetSection("DatabaseConfig"));
-            var dbConfig = configuration.GetSection("DatabaseConfig").Get<DatabaseConfig>();
-            if (dbConfig == null || string.IsNullOrEmpty(dbConfig.Host))
-                throw new InvalidOperationException("DatabaseConfig is missing or invalid.");
+            // Bind the MongoDb configuration section to MongoDbConfig.
+            services.Configure<MongoDbConfig>(configuration.GetSection("MongoDb"));
+            var mongoConfig = configuration.GetSection("MongoDb").Get<MongoDbConfig>();
 
-            Log.Debug("DatabaseConfig Loaded: {@DatabaseConfig}", dbConfig);
+            // Create a MongoClient and get the database.
+            var client = new MongoClient(mongoConfig.ConnectionString);
+            var database = client.GetDatabase(mongoConfig.DatabaseName);
 
+            // Register the IMongoDatabase as a singleton.
+            services.AddSingleton<IMongoDatabase>(database);
             return services;
         }
 
         public static IServiceCollection ConfigurePetsServices(this IServiceCollection services, IConfiguration configuration)
         {
             services.ConfigureSerilog(configuration)
-                    .RegisterConfiguration(configuration)
-                    .AddPostgresDbContext()
                     .AddControllersWithValidators()
+                    .AddMongoDb(configuration)
                     .AddEventHandlers()
                     .AddRepositories()
                     .AddServices()

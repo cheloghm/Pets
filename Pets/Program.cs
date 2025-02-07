@@ -35,13 +35,6 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-// 5. Migrate the database on startup.
-using (var scope = app.Services.CreateScope())
-{
-    var dbContext = scope.ServiceProvider.GetRequiredService<Pets.Data.PetDbContext>();
-    dbContext.Database.Migrate();
-}
-
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();

@@ -1,11 +1,14 @@
 ﻿using System;
 using System.ComponentModel.DataAnnotations;
+using MongoDB.Bson;
+using MongoDB.Bson.Serialization.Attributes;
 
 namespace Pets.Models
 {
     public class Pet
     {
-        [Key]
+        [BsonId]
+        [BsonRepresentation(BsonType.String)] // Store Guid as string for readability.
         public Guid Id { get; set; }
 
         [Required(ErrorMessage = "Pet name is required.")]
@@ -23,7 +26,7 @@ namespace Pets.Models
         [MaxLength(500, ErrorMessage = "Description cannot exceed 500 characters.")]
         public string Description { get; set; }
 
-        // Audit fields for tracking creation and updates
+        // Audit fields (optional)
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     }

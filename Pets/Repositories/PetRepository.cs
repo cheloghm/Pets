@@ -1,5 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
-using Pets.Data;
+﻿using MongoDB.Driver;
 using Pets.Interfaces.Repositories;
 using Pets.Models;
 using System;
@@ -10,44 +9,38 @@ namespace Pets.Repositories
 {
     public class PetRepository : IPetRepository
     {
-        private readonly PetDbContext _context;
+        private readonly IMongoCollection<Pet> _petsCollection;
 
-        public PetRepository(PetDbContext context)
+        public PetRepository(IMongoDatabase database)
         {
-            _context = context;
+            // "Pets" is the collection name in MongoDB.
+            _petsCollection = database.GetCollection<Pet>("Pets");
         }
 
         public async Task<IEnumerable<Pet>> GetAllAsync()
         {
-            return await _context.Pets.ToListAsync();
+            return await _petsCollection.Find(_ => true).ToListAsync();
         }
 
         public async Task<Pet?> GetByIdAsync(Guid id)
         {
-            return await _context.Pets.FindAsync(id);
+            return await _petsCollection.Find(p => p.Id == id).FirstOrDefaultAsync();
         }
 
         public async Task<Pet> AddAsync(Pet pet)
         {
-            _context.Pets.Add(pet);
-            await _context.SaveChangesAsync();
+            await _petsCollection.InsertOneAsync(pet);
             return pet;
         }
 
         public async Task UpdateAsync(Pet pet)
         {
-            _context.Pets.Update(pet);
-            await _context.SaveChangesAsync();
+            await _petsCollection.ReplaceOneAsync(p => p.Id == pet.Id, pet);
         }
 
         public async Task DeleteAsync(Guid id)
         {
-            var pet = await _context.Pets.FindAsync(id);
-            if (pet != null)
-            {
-                _context.Pets.Remove(pet);
-                await _context.SaveChangesAsync();
-            }
+            await _petsCollection.DeleteOneAsync(p => p.Id == id);
         }
     }
 }
